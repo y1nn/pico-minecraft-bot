@@ -48,8 +48,15 @@ cd pico-minecraft-bot
 pip install -r requirements.txt
 ```
 
-### 3. Configure
-Copy the example environment file:
+### 3. Configure (Easy Way) 🪄
+Run the interactive setup script:
+```bash
+python3 setup.py
+```
+It will ask for your Token and ID, then create the config file for you!
+
+### 3. Configure (Manual Way) 🛠️
+Or manually copy the example environment file:
 ```bash
 cp .env.example .env
 nano .env
