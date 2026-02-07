@@ -48,54 +48,29 @@ cd pico-minecraft-bot
 pip install -r requirements.txt
 ```
 
-### 3. Configure (Easy Way) 🪄
+### 3. Configure & Install 🪄
 Run the interactive setup script:
 ```bash
 python3 setup.py
 ```
-It will ask for your Token and ID, then create the config file for you!
-
-### 3. Configure (Manual Way) 🛠️
-Or manually copy the example environment file:
-```bash
-cp .env.example .env
-nano .env
-```
-Fill in your details:
-```ini
-BOT_TOKEN=123456:ABC-DEF...       # Get from @BotFather
-ALLOWED_CHAT_IDS=123456789        # Your Telegram ID
-OWNER_ID=123456789                # Your Telegram ID (for OP commands)
-CONTAINER_NAME=minecraft          # Name of your Docker container
-PROPERTIES_FILE=/path/to/data/server.properties
-```
-
-### 4. Run via Systemd (Recommended)
-Create a service file to keep the bot running:
-```bash
-sudo nano /etc/systemd/system/minecraft-bot.service
-```
-Paste this (adjust paths):
-```ini
-[Unit]
-Description=Minecraft Telegram Bot
-After=network.target docker.service
-
-[Service]
-User=root
-WorkingDirectory=/path/to/pico-minecraft-bot
-ExecStart=/usr/bin/python3 scripts/minecraft_bot.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-Enable and start:
-```bash
-sudo systemctl enable --now minecraft-bot
-```
+This script will:
+1.  Ask for your **Bot Token** and **ID**.
+2.  Create the `.env` configuration file.
+3.  **(Optional)** Install the bot as a **system service** effectively handling step 4 automatically!
 
 ---
+
+## 🐳 Run with Docker (Advanced)
+
+If you prefer keeping your host clean, you can run the bot in a container.
+
+1.  **Configure**: Create `.env` using `setup.py` or manually.
+2.  **Edit**: Open `docker-compose.yml` and **mount your Minecraft data**.
+    *   *The bot needs access to `server.properties` to edit settings!*
+3.  **Run**:
+    ```bash
+    docker-compose up -d
+    ```
 
 ## 📸 Screenshots
 

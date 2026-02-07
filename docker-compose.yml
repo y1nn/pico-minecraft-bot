@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: pico_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Allow bot to control host docker (Start/Stop server)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # MOUNT YOUR DATA HERE:
+      # Map your host Minecraft data to the container so the bot can edit properties/read stats.
+      # format: - /path/on/host:/path/in/container
+      # Example:
+      # - /home/user/minecraft:/data
+
+      # Network mode host is often easiest for local bots, but bridge works if mapped correctly.
+      # network_mode: host

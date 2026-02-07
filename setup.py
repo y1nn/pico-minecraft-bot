@@ -61,12 +61,58 @@ BACKUP_SCRIPT={backup_script}
         with open(".env", "w") as f:
             f.write(env_content)
         print("\n✅ Configuration saved to '.env'!")
-        print("------------------------------------------")
-        print("🚀 You can now run the bot with:")
-        print("   python3 scripts/minecraft_bot.py")
-        print("------------------------------------------")
     except Exception as e:
         print(f"\n❌ Error saving file: {e}")
+        return
+
+    # 5. Service Installation (Optional)
+    print("\n------------------------------------------")
+    print("⚙️  Service Setup (Linux Only)")
+    install_svc = get_input("Do you want to install this bot as a Background Service? (y/n)", default="y")
+    
+    if install_svc.lower() == "y":
+        service_path = "/etc/systemd/system/minecraft-bot.service"
+        current_dir = os.getcwd()
+        python_exec = os.popen("which python3").read().strip()
+        user = os.getenv("USER")
+
+        service_content = f"""[Unit]
+Description=Pico Minecraft Bot
+After=network.target docker.service
+
+[Service]
+User={user}
+WorkingDirectory={current_dir}
+ExecStart={python_exec} {current_dir}/scripts/minecraft_bot.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+"""
+        print(f"\nAttempting to create service at {service_path}...")
+        try:
+            # Try writing directly (needs sudo)
+            if os.access("/etc/systemd/system", os.W_OK):
+                with open(service_path, "w") as f:
+                    f.write(service_content)
+                print("✅ Service file created!")
+                os.system("systemctl daemon-reload")
+                os.system("systemctl enable --now minecraft-bot")
+                print("🚀 Service STARTED and ENABLED! The bot is running.")
+            else:
+                # Fallback: Create a temporary file and ask user to copy
+                with open("minecraft-bot.service", "w") as f:
+                    f.write(service_content)
+                print("⚠️  Permission denied (Run with sudo to auto-install).")
+                print("📝 I created 'minecraft-bot.service' locally for you.")
+                print("\n👉 Run these commands to finish:")
+                print(f"sudo mv minecraft-bot.service {service_path}")
+                print("sudo systemctl enable --now minecraft-bot")
+        except Exception as e:
+            print(f"❌ Error creating service: {e}")
+
+    print("------------------------------------------")
+    print("🎉 Setup Complete!")
 
 if __name__ == "__main__":
     main()
