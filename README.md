@@ -93,6 +93,33 @@ sudo systemctl enable --now minecraft-bot
 ## 📸 Screenshots
 *(Add your screenshots here)*
 
+## 📚 Commands Reference
+
+| Command | Description | Permission |
+| :--- | :--- | :--- |
+| `/add <name>` | Add a player to the whitelist | Admin |
+| `/remove <name>` | Remove a player from the whitelist | Admin |
+| `/kick <name>` | Kick a player from the server | Admin |
+| `/cmd <command>` | Execute a raw RCON command (e.g. `/cmd say Hi`) | **Owner** |
+
+> **Note:** Most management is done via the **Interactive Panel**. Just type `/start` or click buttons!
+
+## ❓ Troubleshooting
+
+### ❌ Bot not responding?
+- Check if the Minecraft container is running: `docker ps`
+- Ensure RCON is enabled in `server.properties`:
+  ```ini
+  enable-rcon=true
+  rcon.password=yourpassword
+  rcon.port=25575
+  ```
+- Check bot logs: `journalctl -u minecraft-bot -f` (if using Systemd)
+
+### ⚠️ "RCON Connection Failed"
+- Make sure the `CONTAINER_NAME` in `.env` matches your actual Docker container name.
+- Verify the bot is running on the *same machine* as the Docker container.
+
 ## 🤝 Contributing
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
