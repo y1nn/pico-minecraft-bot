@@ -98,7 +98,10 @@ sudo systemctl enable --now minecraft-bot
 ---
 
 ## 📸 Screenshots
-*(Add your screenshots here)*
+
+| Server Status | Player Management | Command Shortcuts |
+| :---: | :---: | :---: |
+| ![Server Status](screenshots/screen_01.png) | ![Player Management](screenshots/screen_02.png) | ![Shortcuts](screenshots/screen_03.png) |
 
 ## 📚 Commands Reference
 
