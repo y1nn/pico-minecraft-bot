@@ -39,7 +39,7 @@ A powerful, standalone **Telegram Bot** to manage your Dockerized Minecraft Serv
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/Start-0/pico-minecraft-bot.git
+git clone https://github.com/y1nn/pico-minecraft-bot.git
 cd pico-minecraft-bot
 ```
 
