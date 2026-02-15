@@ -107,7 +107,7 @@ def get_whitelist_state():
                 if line.strip().startswith("white-list="):
                     state = line.strip().split("=")[1].lower()
                     return state == "true"
-    except:
+    except (FileNotFoundError, IOError):
         return None
     return False
 
@@ -119,7 +119,7 @@ def get_server_stats():
             timeout=5
         ).strip().decode()
         return stats
-    except:
+    except (subprocess.SubprocessError, OSError):
         return "OFFLINE"
 
 def get_server_status():
@@ -129,7 +129,7 @@ def get_server_status():
             ["docker", "inspect", "-f", "{{.State.Status}}", CONTAINER_NAME],
             timeout=5
         ).strip().decode()
-    except:
+    except (subprocess.SubprocessError, OSError):
         return "🔴 *Server is DOWN* (Container not found)"
 
     if box_status != "running":
@@ -363,7 +363,7 @@ def read_property(key):
             for line in f:
                 if line.startswith(f"{key}="):
                     return line.strip().split("=")[1]
-    except:
+    except (FileNotFoundError, IOError):
         return "N/A"
     return "N/A"
 
@@ -431,7 +431,7 @@ def monitor_logs():
                 if state != "true":
                     time.sleep(10) # Sleep if stopped
                     continue
-            except:
+            except (subprocess.SubprocessError, OSError):
                 time.sleep(10)
                 continue
 
@@ -525,7 +525,7 @@ def get_playtime_top():
                                 name = uuid_map.get(uuid, uuid[:8])
                                 hours = ticks / 20 / 3600
                                 players.append((name, hours))
-                    except:
+                    except Exception:
                         pass
         
         # Sort and format
@@ -743,7 +743,7 @@ def handle_callback(cb):
         if kb:
             try:
                 edit_message(chat_id, msg_id, msg, kb)
-            except:
+            except Exception:
                 send_message(chat_id, msg, kb)
         else:
              send_message(chat_id, msg)
