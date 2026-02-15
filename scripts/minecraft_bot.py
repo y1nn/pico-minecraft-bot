@@ -361,7 +361,7 @@ def read_all_properties():
                 if "=" in line and not line.startswith("#"):
                     key, value = line.split("=", 1)
                     props[key] = value
-    except:
+    except (FileNotFoundError, IOError):
         pass
     return props
 
