@@ -672,11 +672,34 @@ def handle_callback(cb):
         return
 
     elif data == "stop_server":
+        kb = {
+            "inline_keyboard": [[
+                {"text": "✅ Yes, Stop", "callback_data": "confirm_stop"},
+                {"text": "❌ Cancel", "callback_data": "cancel_stop"}
+            ]]
+        }
+        edit_message(
+            chat_id,
+            msg_id,
+            "⚠️ *Are you sure you want to STOP the server?*\n"
+            "This will kick all players.",
+            kb
+        )
+        answer_callback(cb_id, "Confirmation needed")
+        return
+
+    elif data == "confirm_stop":
         msg = stop_server()
         answer_callback(cb_id, msg)
         time.sleep(2)
         status = get_server_status()
         edit_message(chat_id, msg_id, status + "\n" + COMMANDS_HELP, get_main_keyboard())
+        return
+
+    elif data == "cancel_stop":
+        status = get_server_status()
+        edit_message(chat_id, msg_id, status + "\n" + COMMANDS_HELP, get_main_keyboard())
+        answer_callback(cb_id, "Cancelled")
         return
 
     elif data == "trigger_backup":
