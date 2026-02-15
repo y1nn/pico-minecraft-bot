@@ -231,7 +231,7 @@ def get_whitelist():
     if ":" in clean_raw:
         names = clean_raw.split(":", 1)[1].strip()
         if not names:
-             return "📜 *Whitelist is empty.*"
+             return "📭 *Whitelist is empty.*\nUse `/add <name>` to add players."
         formatted_names = ", ".join([f"`{n.strip()}`" for n in names.split(",") if n.strip()])
         return f"📜 *Whitelisted Players:*\n{formatted_names}"
     return raw
@@ -307,10 +307,23 @@ def get_main_keyboard():
             ],
             [
                  {"text": "ℹ️ Help / Guide", "callback_data": "show_help"},
-                 {"text": "📜 Guide", "callback_data": "show_guide"}
+                 {"text": "📋 Copy IP", "callback_data": "get_ip"}
             ]
         ]
     }
+
+def get_public_ip():
+    try:
+        # Try to get from environment first
+        env_ip = os.getenv("SERVER_IP")
+        if env_ip:
+            return env_ip
+
+        # Fallback to external service
+        ip = subprocess.check_output(["curl", "-s", "ifconfig.me"], timeout=5).decode().strip()
+        return ip
+    except:
+        return "Unknown IP"
 
 def get_settings_keyboard():
     return {
@@ -327,8 +340,8 @@ def get_settings_keyboard():
                 {"text": "💀 Hard", "callback_data": "set_diff:hard"}
             ],
             [
-                {"text": "🎒 KeepInv ON", "callback_data": "keepinv_on"},
-                {"text": "🔻 KeepInv OFF", "callback_data": "keepinv_off"}
+                {"text": "🟢 KeepInv", "callback_data": "keepinv_on"},
+                {"text": "🔘 KeepInv", "callback_data": "keepinv_off"}
             ],
             [
                 {"text": "🔧 Properties (PvP/Flight...)", "callback_data": "menu_properties"}
@@ -366,9 +379,9 @@ def update_property(key, value):
 
 def get_properties_keyboard():
     # Read current values
-    pvp = "✅" if read_property("pvp") == "true" else "❌"
-    flight = "✅" if read_property("allow-flight") == "true" else "❌"
-    nether = "✅" if read_property("allow-nether") == "true" else "❌"
+    pvp = "🟢" if read_property("pvp") == "true" else "🔴"
+    flight = "🟢" if read_property("allow-flight") == "true" else "🔴"
+    nether = "🟢" if read_property("allow-nether") == "true" else "🔴"
     
     max_p = read_property("max-players")
     view_d = read_property("view-distance")
@@ -578,6 +591,12 @@ def handle_callback(cb):
         answer_callback(cb_id, "Commands Guide")
         send_message(chat_id, GUIDE_TEXT)
         return
+
+    if data == "get_ip":
+        ip = get_public_ip()
+        send_message(chat_id, f"🌐 *Server IP:*\n`{ip}`")
+        answer_callback(cb_id, "Sent IP")
+        return
     
     # Settings Menu Handlers
     if data == "menu_settings":
@@ -664,11 +683,14 @@ def handle_callback(cb):
         return
 
     elif data == "restart_server":
+        edit_message(chat_id, msg_id, "⏳ *Restarting Server...*\nPlease wait (~60s).", get_main_keyboard())
+        answer_callback(cb_id, "Restarting...")
+
         msg = restart_server()
-        answer_callback(cb_id, msg)
         time.sleep(5) # Wait for restart
+
         status = get_server_status()
-        edit_message(chat_id, msg_id, status + "\n" + COMMANDS_HELP, get_main_keyboard())
+        edit_message(chat_id, msg_id, f"✅ *{msg}*\n\n{status}\n\n{COMMANDS_HELP}", get_main_keyboard())
         return
 
     elif data == "stop_server":
@@ -703,9 +725,11 @@ def handle_callback(cb):
         return
 
     elif data == "trigger_backup":
-        msg = run_backup()
+        edit_message(chat_id, msg_id, "⏳ *Starting Backup...*", get_main_keyboard())
         answer_callback(cb_id, "Backup started!")
-        send_message(chat_id, msg)
+
+        msg = run_backup()
+        edit_message(chat_id, msg_id, f"{msg}\n\n{get_server_status()}\n\n{COMMANDS_HELP}", get_main_keyboard())
         return
         
     elif data == "online":
