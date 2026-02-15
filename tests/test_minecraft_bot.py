@@ -1,0 +1,108 @@
+import sys
+import os
+import unittest
+import json
+from unittest.mock import MagicMock, patch
+
+# Mock external dependencies before import
+sys.modules["requests"] = MagicMock()
+sys.modules["dotenv"] = MagicMock()
+sys.modules["subprocess"] = MagicMock()
+
+# Add parent directory to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+try:
+    import scripts.minecraft_bot as bot
+except ImportError:
+    pass
+
+class TestMinecraftBot(unittest.TestCase):
+
+    def setUp(self):
+        # Create temporary directory structure
+        self.test_dir = "/tmp/minecraft_bot_test"
+        if not os.path.exists(self.test_dir):
+            os.makedirs(self.test_dir)
+
+        self.stats_dir = os.path.join(self.test_dir, "world", "stats")
+        os.makedirs(self.stats_dir, exist_ok=True)
+
+        self.properties_file = os.path.join(self.test_dir, "server.properties")
+        with open(self.properties_file, "w") as f:
+            f.write("pvp=true\n")
+
+        # Patch PROPERTIES_FILE in the imported module
+        bot.PROPERTIES_FILE = self.properties_file
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
+
+    def test_get_playtime_top_empty(self):
+        msg = bot.get_playtime_top()
+        self.assertEqual(msg, "No stats available.")
+
+    def test_get_playtime_top_with_data(self):
+        # Create usercache.json
+        usercache = [{"name": "Player1", "uuid": "uuid1"}]
+        with open(os.path.join(self.test_dir, "usercache.json"), "w") as f:
+            json.dump(usercache, f)
+
+        # Create stat file
+        stat_data = {
+            "stats": {
+                "minecraft:custom": {
+                    "minecraft:play_time": 72000 # 1 hour
+                }
+            }
+        }
+        with open(os.path.join(self.stats_dir, "uuid1.json"), "w") as f:
+            json.dump(stat_data, f)
+
+        msg = bot.get_playtime_top()
+        self.assertIn("Player1", msg)
+        self.assertIn("1.0 hours", msg)
+
+    def test_get_playtime_top_malformed_json_inner_catch(self):
+        # Create malformed stat file to trigger inner except
+        with open(os.path.join(self.stats_dir, "bad.json"), "w") as f:
+            f.write("{ invalid json }")
+
+        # Create valid usercache
+        with open(os.path.join(self.test_dir, "usercache.json"), "w") as f:
+            f.write("[]")
+
+        # Should check behavior when inner except catches error
+        msg = bot.get_playtime_top()
+        self.assertEqual(msg, "No stats available.")
+
+    def test_get_playtime_top_outer_exception_oserror(self):
+        # Mock os.listdir to raise OSError
+        with patch("os.listdir", side_effect=OSError("Disk error")):
+            msg = bot.get_playtime_top()
+            self.assertIn("Error calculating stats: Disk error", msg)
+
+    def test_get_playtime_top_outer_exception_typeerror(self):
+        # Case 1: usercache is null
+        with open(os.path.join(self.test_dir, "usercache.json"), "w") as f:
+            f.write("null")
+
+        msg = bot.get_playtime_top()
+        # Should catch TypeError
+        self.assertIn("Error calculating stats", msg)
+
+    def test_get_playtime_top_outer_exception_keyerror(self):
+        # Create usercache with missing keys
+        usercache = [{"name": "Player1"}] # missing uuid
+        with open(os.path.join(self.test_dir, "usercache.json"), "w") as f:
+            json.dump(usercache, f)
+
+        msg = bot.get_playtime_top()
+        # Should catch KeyError
+        self.assertIn("Error calculating stats", msg)
+        # Verify it's not a crash (KeyError propagates up if not caught)
+
+if __name__ == "__main__":
+    unittest.main()

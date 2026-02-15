@@ -519,7 +519,7 @@ def get_playtime_top():
                                 name = uuid_map.get(uuid, uuid[:8])
                                 hours = ticks / 20 / 3600
                                 players.append((name, hours))
-                    except:
+                    except (OSError, ValueError, AttributeError, TypeError, KeyError):
                         pass
         
         # Sort and format
@@ -531,7 +531,7 @@ def get_playtime_top():
             msg += f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n"
             
         return msg if top_list else "No stats available."
-    except Exception as e:
+    except (OSError, ValueError, AttributeError, TypeError, KeyError, IndexError) as e:
         return f"Error calculating stats: {e}"
 
 def handle_callback(cb):
