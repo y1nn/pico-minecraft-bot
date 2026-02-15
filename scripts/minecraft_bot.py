@@ -352,15 +352,21 @@ def get_settings_keyboard():
         ]
     }
 
-def read_property(key):
+def read_all_properties():
+    props = {}
     try:
         with open(PROPERTIES_FILE, "r") as f:
             for line in f:
-                if line.startswith(f"{key}="):
-                    return line.strip().split("=")[1]
+                line = line.strip()
+                if "=" in line and not line.startswith("#"):
+                    key, value = line.split("=", 1)
+                    props[key] = value
     except:
-        return "N/A"
-    return "N/A"
+        pass
+    return props
+
+def read_property(key):
+    return read_all_properties().get(key, "N/A")
 
 def update_property(key, value):
     try:
@@ -379,12 +385,13 @@ def update_property(key, value):
 
 def get_properties_keyboard():
     # Read current values
-    pvp = "🟢" if read_property("pvp") == "true" else "🔴"
-    flight = "🟢" if read_property("allow-flight") == "true" else "🔴"
-    nether = "🟢" if read_property("allow-nether") == "true" else "🔴"
+    props = read_all_properties()
+    pvp = "🟢" if props.get("pvp") == "true" else "🔴"
+    flight = "🟢" if props.get("allow-flight") == "true" else "🔴"
+    nether = "🟢" if props.get("allow-nether") == "true" else "🔴"
     
-    max_p = read_property("max-players")
-    view_d = read_property("view-distance")
+    max_p = props.get("max-players", "N/A")
+    view_d = props.get("view-distance", "N/A")
     
     return {
         "inline_keyboard": [
