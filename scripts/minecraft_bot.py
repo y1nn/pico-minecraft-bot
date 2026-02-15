@@ -102,7 +102,7 @@ def get_whitelist_state():
                 if line.strip().startswith("white-list="):
                     state = line.strip().split("=")[1].lower()
                     return state == "true"
-    except:
+    except Exception:
         return None
     return False
 
