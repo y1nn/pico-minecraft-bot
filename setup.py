@@ -1,4 +1,5 @@
 import os
+import sys
 
 def get_input(prompt, default=None):
     if default:
@@ -73,7 +74,7 @@ BACKUP_SCRIPT={backup_script}
     if install_svc.lower() == "y":
         service_path = "/etc/systemd/system/minecraft-bot.service"
         current_dir = os.getcwd()
-        python_exec = os.popen("which python3").read().strip()
+        python_exec = sys.executable
         user = os.getenv("USER")
 
         service_content = f"""[Unit]
