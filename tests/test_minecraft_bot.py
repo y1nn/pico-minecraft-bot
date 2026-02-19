@@ -22,6 +22,19 @@ class TestMinecraftBot(unittest.TestCase):
         text = "\x1b[31mRed Text\x1b[0m"
         self.assertEqual(strip_ansi(text), "Red Text")
 
+    def test_strip_ansi_multiple_codes(self):
+        text = "\x1b[1m\x1b[32mBold Green\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Bold Green")
+
+    def test_strip_ansi_complex(self):
+        text = "Normal \x1b[33mYellow\x1b[0m Mixed \x1b[44mBlueBG\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Normal Yellow Mixed BlueBG")
+
+    def test_strip_ansi_other_escapes(self):
+        # Test some other CSI sequences
+        text = "Hello\x1b[2JWorld" # Clear screen
+        self.assertEqual(strip_ansi(text), "HelloWorld")
+
     @patch('builtins.open', new_callable=mock_open, read_data="pvp=true\nmax-players=20\n#comment=ignored")
     @patch('scripts.minecraft_bot.PROPERTIES_FILE', 'server.properties') # Mock the constant if possible, or use side_effect
     def test_read_all_properties_success(self, mock_file):
