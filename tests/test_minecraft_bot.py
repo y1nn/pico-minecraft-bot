@@ -4,7 +4,7 @@ import unittest
 import json
 from unittest.mock import MagicMock, patch
 
-# Mock external dependencies before import
+# Mock dependencies that are not installed or have side effects on import
 sys.modules["requests"] = MagicMock()
 sys.modules["dotenv"] = MagicMock()
 sys.modules["subprocess"] = MagicMock()
@@ -20,6 +20,32 @@ except ImportError:
 
 class TestMinecraftBot(unittest.TestCase):
 
+    # Original tests from main (converted to unittest style)
+    def test_strip_ansi_empty(self):
+        self.assertEqual(strip_ansi(""), "")
+
+    def test_strip_ansi_no_ansi(self):
+        text = "Hello World"
+        self.assertEqual(strip_ansi(text), text)
+
+    def test_strip_ansi_with_color(self):
+        text = "\x1b[31mRed Text\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Red Text")
+
+    def test_strip_ansi_multiple_codes(self):
+        text = "\x1b[1m\x1b[32mBold Green\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Bold Green")
+
+    def test_strip_ansi_complex(self):
+        text = "Normal \x1b[33mYellow\x1b[0m Mixed \x1b[44mBlueBG\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Normal Yellow Mixed BlueBG")
+
+    def test_strip_ansi_other_escapes(self):
+        # Test some other CSI sequences
+        text = "Hello\x1b[2JWorld" # Clear screen
+        self.assertEqual(strip_ansi(text), "HelloWorld")
+
+    # New tests for get_playtime_top
     def setUp(self):
         # Create temporary directory structure
         self.test_dir = "/tmp/minecraft_bot_test"
@@ -103,31 +129,6 @@ class TestMinecraftBot(unittest.TestCase):
         msg = bot.get_playtime_top()
         # Should catch KeyError
         self.assertIn("Error calculating stats", msg)
-
-    # Merged tests from main
-    def test_strip_ansi_empty(self):
-        self.assertEqual(strip_ansi(""), "")
-
-    def test_strip_ansi_no_ansi(self):
-        text = "Hello World"
-        self.assertEqual(strip_ansi(text), text)
-
-    def test_strip_ansi_with_color(self):
-        text = "\x1b[31mRed Text\x1b[0m"
-        self.assertEqual(strip_ansi(text), "Red Text")
-
-    def test_strip_ansi_multiple_codes(self):
-        text = "\x1b[1m\x1b[32mBold Green\x1b[0m"
-        self.assertEqual(strip_ansi(text), "Bold Green")
-
-    def test_strip_ansi_complex(self):
-        text = "Normal \x1b[33mYellow\x1b[0m Mixed \x1b[44mBlueBG\x1b[0m"
-        self.assertEqual(strip_ansi(text), "Normal Yellow Mixed BlueBG")
-
-    def test_strip_ansi_other_escapes(self):
-        # Test some other CSI sequences
-        text = "Hello\x1b[2JWorld" # Clear screen
-        self.assertEqual(strip_ansi(text), "HelloWorld")
 
 if __name__ == "__main__":
     unittest.main()

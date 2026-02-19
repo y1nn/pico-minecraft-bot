@@ -52,9 +52,14 @@ GUIDE_TEXT = (
     "`say <message>` (Broadcast)"
 )
 
-def rcon_command(cmd_str):
+def rcon_command(cmd_input):
     try:
-        cmd = ["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli"] + cmd_str.split()
+        if isinstance(cmd_input, list):
+            args = cmd_input
+        else:
+            args = cmd_input.split()
+
+        cmd = ["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli"] + args
         # Add timeout to prevent hanging commands
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         return result.stdout.strip()
@@ -102,7 +107,7 @@ def get_whitelist_state():
                 if line.strip().startswith("white-list="):
                     state = line.strip().split("=")[1].lower()
                     return state == "true"
-    except:
+    except (FileNotFoundError, IOError):
         return None
     return False
 
@@ -114,7 +119,7 @@ def get_server_stats():
             timeout=5
         ).strip().decode()
         return stats
-    except:
+    except (subprocess.SubprocessError, OSError):
         return "OFFLINE"
 
 def get_server_status():
@@ -124,7 +129,7 @@ def get_server_status():
             ["docker", "inspect", "-f", "{{.State.Status}}", CONTAINER_NAME],
             timeout=5
         ).strip().decode()
-    except:
+    except (subprocess.SubprocessError, OSError):
         return "🔴 *Server is DOWN* (Container not found)"
 
     if box_status != "running":
@@ -358,7 +363,7 @@ def read_property(key):
             for line in f:
                 if line.startswith(f"{key}="):
                     return line.strip().split("=")[1]
-    except:
+    except (FileNotFoundError, IOError):
         return "N/A"
     return "N/A"
 
@@ -426,7 +431,7 @@ def monitor_logs():
                 if state != "true":
                     time.sleep(10) # Sleep if stopped
                     continue
-            except:
+            except (subprocess.SubprocessError, OSError):
                 time.sleep(10)
                 continue
 
@@ -466,9 +471,10 @@ def monitor_logs():
                 if any(k in line for k in death_keywords) and "]: " in line:
                      msg_part = line.split("]: ", 1)[1].strip()
                      if not msg_part.startswith("<"): 
-                         safe_msg = msg_part.replace('"', "'")
-                         rcon_command(f'title @a title {{"text":"{safe_msg}", "color":"yellow", "bold":true}}')
-                         rcon_command(f'title @a subtitle {{"text":"RIP ☠️", "color":"red"}}')
+                         title_payload = {"text": msg_part, "color": "yellow", "bold": True}
+                         subtitle_payload = {"text": "RIP ☠️", "color": "red"}
+                         rcon_command(["title", "@a", "title", json.dumps(title_payload)])
+                         rcon_command(["title", "@a", "subtitle", json.dumps(subtitle_payload)])
                          broadcast_message(f"💀 *Death:* {msg_part}")
 
                 # Detect BLOCKED (Whitelist)
@@ -737,7 +743,7 @@ def handle_callback(cb):
         if kb:
             try:
                 edit_message(chat_id, msg_id, msg, kb)
-            except:
+            except Exception:
                 send_message(chat_id, msg, kb)
         else:
              send_message(chat_id, msg)
@@ -833,15 +839,17 @@ def handle_text(msg):
     # Check for pending broadcast
     if pending_broadcast.get(chat_id):
         # Send title command
-        safe_text = text.replace('"', "'")
+        title_payload = {"text": text, "color": "gold", "bold": True}
+        subtitle_payload = {"text": f"From {user_name}", "color": "gray"}
+
         # Title command: title @a title {"text":"MESSAGE", "color":"gold"}
-        rcon_command(f'title @a title {{"text":"{safe_text}", "color":"gold", "bold":true}}')
-        rcon_command(f'title @a subtitle {{"text":"From {user_name}", "color":"gray"}}')
+        rcon_command(["title", "@a", "title", json.dumps(title_payload)])
+        rcon_command(["title", "@a", "subtitle", json.dumps(subtitle_payload)])
         
         # Also play sound
         rcon_command("execute at @a run playsound minecraft:entity.experience_orb.pickup master @p ~ ~ ~ 1 1")
         
-        send_message(chat_id, f"✅ *Broadcast Sent:*\n{safe_text}")
+        send_message(chat_id, f"✅ *Broadcast Sent:*\n{text}")
         pending_broadcast[chat_id] = False
         return
 
@@ -896,8 +904,12 @@ def handle_text(msg):
     else:
         # Chat Relay: Send text to game (Only if chat mode is ON)
         if chat_mode_enabled:
-            safe_text = text.replace('"', "'") # Basic sanitization
-            rcon_command(f"tellraw @a [\"\",{{\"text\":\"[{user_name}@Telegram]: \",\"color\":\"aqua\"}},{{\"text\":\"{safe_text}\",\"color\":\"white\"}}]")
+            tellraw_payload = [
+                "",
+                {"text": f"[{user_name}@Telegram]: ", "color": "aqua"},
+                {"text": text, "color": "white"}
+            ]
+            rcon_command(["tellraw", "@a", json.dumps(tellraw_payload)])
 
 def monitor_resources():
     print("Resource monitor started...")
