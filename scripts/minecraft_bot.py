@@ -532,11 +532,14 @@ def get_playtime_top():
         players.sort(key=lambda x: x[1], reverse=True)
         top_list = players[:5]
         
-        msg = "🏆 *Top Playtime:*\n"
+        if not top_list:
+            return "No stats available."
+
+        msg_parts = ["🏆 *Top Playtime:*\n"]
         for i, (name, hours) in enumerate(top_list, 1):
-            msg += f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n"
+            msg_parts.append(f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n")
             
-        return msg if top_list else "No stats available."
+        return "".join(msg_parts)
     except Exception as e:
         return f"Error calculating stats: {e}"
 
