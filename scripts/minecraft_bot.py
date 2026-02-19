@@ -20,6 +20,9 @@ BACKUP_SCRIPT = os.getenv("BACKUP_SCRIPT", "./scripts/auto_backup.sh")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
+# Compiled Regex Patterns
+ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 # State to track pending broadcasts and chat mode
 pending_broadcast = {}
 chat_mode_enabled = True # Default ON
@@ -163,8 +166,7 @@ def get_server_status():
     return status_msg
 
 def strip_ansi(text):
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
+    return ANSI_ESCAPE_RE.sub('', text)
 
 def get_online_players_list():
     raw = rcon_command("list")
@@ -250,31 +252,26 @@ def send_request(method, payload, timeout=10):
         print(f"Request error {method}: {e}")
         return None
 
-def send_message(chat_id, text, reply_markup=None):
+def _send_text_msg(method, chat_id, text, reply_markup=None, **extra_payload):
     payload = {
         "chat_id": chat_id,
         "text": text,
         "parse_mode": "Markdown",
-        "disable_web_page_preview": True
+        **extra_payload
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    send_request("sendMessage", payload)
+    return send_request(method, payload)
+
+def send_message(chat_id, text, reply_markup=None):
+    return _send_text_msg("sendMessage", chat_id, text, reply_markup, disable_web_page_preview=True)
 
 def broadcast_message(text, reply_markup=None):
     for admin_id in ALLOWED_CHAT_IDS:
         send_message(admin_id, text, reply_markup)
 
 def edit_message(chat_id, message_id, text, reply_markup=None):
-    payload = {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    send_request("editMessageText", payload)
+    return _send_text_msg("editMessageText", chat_id, text, reply_markup, message_id=message_id)
 
 def answer_callback(callback_id, text):
     send_request("answerCallbackQuery", {"callback_query_id": callback_id, "text": text}, timeout=5)
@@ -536,16 +533,24 @@ def get_playtime_top():
                         pass
         
         # Sort and format
-        players.sort(key=lambda x: x[1], reverse=True)
-        top_list = players[:5]
-        
-        msg = "🏆 *Top Playtime:*\n"
-        for i, (name, hours) in enumerate(top_list, 1):
-            msg += f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n"
-            
-        return msg if top_list else "No stats available."
+        return format_playtime_message(players)
     except Exception as e:
         return f"Error calculating stats: {e}"
+
+def format_playtime_message(players):
+    """Formats a list of (name, hours) tuples into a top 5 leaderboard string."""
+    # Sort by hours descending
+    players.sort(key=lambda x: x[1], reverse=True)
+    top_list = players[:5]
+
+    if not top_list:
+        return "No stats available."
+
+    msg_parts = ["🏆 *Top Playtime:*\n"]
+    for i, (name, hours) in enumerate(top_list, 1):
+        msg_parts.append(f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n")
+
+    return "".join(msg_parts)
 
 def handle_callback(cb):
     global chat_mode_enabled
@@ -865,9 +870,6 @@ def handle_text(msg):
         if text.startswith("/start") or text.startswith("/help") or text.startswith("/panel"):
             status = get_server_status()
             send_message(chat_id, f"👋 *Pico Minecraft Bot*\n\n{status}\n\n{COMMANDS_HELP}", get_main_keyboard())
-            return
-            
-            send_message(chat_id, msg)
             return
 
         if text.startswith("/cmd "):
