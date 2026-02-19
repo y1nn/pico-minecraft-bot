@@ -14,6 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
     import scripts.minecraft_bot as bot
+    from scripts.minecraft_bot import strip_ansi
 except ImportError:
     pass
 
@@ -102,7 +103,31 @@ class TestMinecraftBot(unittest.TestCase):
         msg = bot.get_playtime_top()
         # Should catch KeyError
         self.assertIn("Error calculating stats", msg)
-        # Verify it's not a crash (KeyError propagates up if not caught)
+
+    # Merged tests from main
+    def test_strip_ansi_empty(self):
+        self.assertEqual(strip_ansi(""), "")
+
+    def test_strip_ansi_no_ansi(self):
+        text = "Hello World"
+        self.assertEqual(strip_ansi(text), text)
+
+    def test_strip_ansi_with_color(self):
+        text = "\x1b[31mRed Text\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Red Text")
+
+    def test_strip_ansi_multiple_codes(self):
+        text = "\x1b[1m\x1b[32mBold Green\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Bold Green")
+
+    def test_strip_ansi_complex(self):
+        text = "Normal \x1b[33mYellow\x1b[0m Mixed \x1b[44mBlueBG\x1b[0m"
+        self.assertEqual(strip_ansi(text), "Normal Yellow Mixed BlueBG")
+
+    def test_strip_ansi_other_escapes(self):
+        # Test some other CSI sequences
+        text = "Hello\x1b[2JWorld" # Clear screen
+        self.assertEqual(strip_ansi(text), "HelloWorld")
 
 if __name__ == "__main__":
     unittest.main()
