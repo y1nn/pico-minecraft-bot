@@ -324,7 +324,7 @@ def get_public_ip():
         # Fallback to external service
         ip = subprocess.check_output(["curl", "-s", "ifconfig.me"], timeout=5).decode().strip()
         return ip
-    except:
+    except (subprocess.SubprocessError, OSError):
         return "Unknown IP"
 
 def get_settings_keyboard():
