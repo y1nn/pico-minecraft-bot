@@ -13,7 +13,7 @@ sys.modules["dotenv"] = MagicMock()
 if os.getcwd() not in sys.path:
     sys.path.append(os.getcwd())
 
-from scripts.minecraft_bot import get_playtime_top
+from scripts.minecraft_bot import get_playtime_top, format_playtime_message
 
 class TestPlaytime(unittest.TestCase):
     @patch('scripts.minecraft_bot.os.path.exists')
@@ -94,6 +94,27 @@ class TestPlaytime(unittest.TestCase):
         # Assertions
         print(f"Result Empty:\n{result}")
         self.assertEqual(result, "No stats available.")
+
+class TestFormatPlaytime(unittest.TestCase):
+    def test_format_playtime_message(self):
+        players = [("Alice", 1.5), ("Bob", 2.0)]
+        msg = format_playtime_message(players)
+        self.assertIn("🏆 *Top Playtime:*", msg)
+        # Check order (Bob should be first because 2.0 > 1.5)
+        self.assertIn("1. 👤 *Bob:* `2.0 hours`", msg)
+        self.assertIn("2. 👤 *Alice:* `1.5 hours`", msg)
+
+    def test_format_playtime_message_empty(self):
+        msg = format_playtime_message([])
+        self.assertEqual(msg, "No stats available.")
+
+    def test_format_playtime_message_limit(self):
+        # Should only show top 5
+        players = [(f"P{i}", float(i)) for i in range(10)]
+        msg = format_playtime_message(players)
+        self.assertIn("1. 👤 *P9:* `9.0 hours`", msg)
+        self.assertIn("5. 👤 *P5:* `5.0 hours`", msg)
+        self.assertNotIn("6. 👤 *P4:*", msg)
 
 if __name__ == '__main__':
     unittest.main()

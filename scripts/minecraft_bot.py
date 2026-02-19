@@ -20,9 +20,6 @@ BACKUP_SCRIPT = os.getenv("BACKUP_SCRIPT", "./scripts/auto_backup.sh")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
-# Compiled Regex Patterns
-ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-
 # State to track pending broadcasts and chat mode
 pending_broadcast = {}
 chat_mode_enabled = True # Default ON
@@ -55,14 +52,9 @@ GUIDE_TEXT = (
     "`say <message>` (Broadcast)"
 )
 
-def rcon_command(cmd_input):
+def rcon_command(cmd_str):
     try:
-        if isinstance(cmd_input, list):
-            args = cmd_input
-        else:
-            args = cmd_input.split()
-
-        cmd = ["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli"] + args
+        cmd = ["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli"] + cmd_str.split()
         # Add timeout to prevent hanging commands
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         return result.stdout.strip()
@@ -110,7 +102,7 @@ def get_whitelist_state():
                 if line.strip().startswith("white-list="):
                     state = line.strip().split("=")[1].lower()
                     return state == "true"
-    except (FileNotFoundError, IOError):
+    except:
         return None
     return False
 
@@ -122,7 +114,7 @@ def get_server_stats():
             timeout=5
         ).strip().decode()
         return stats
-    except (subprocess.SubprocessError, OSError):
+    except:
         return "OFFLINE"
 
 def get_server_status():
@@ -132,7 +124,7 @@ def get_server_status():
             ["docker", "inspect", "-f", "{{.State.Status}}", CONTAINER_NAME],
             timeout=5
         ).strip().decode()
-    except (subprocess.SubprocessError, OSError):
+    except:
         return "🔴 *Server is DOWN* (Container not found)"
 
     if box_status != "running":
@@ -166,7 +158,8 @@ def get_server_status():
     return status_msg
 
 def strip_ansi(text):
-    return ANSI_ESCAPE_RE.sub('', text)
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
 
 def get_online_players_list():
     raw = rcon_command("list")
@@ -252,26 +245,31 @@ def send_request(method, payload, timeout=10):
         print(f"Request error {method}: {e}")
         return None
 
-def _send_text_msg(method, chat_id, text, reply_markup=None, **extra_payload):
+def send_message(chat_id, text, reply_markup=None):
     payload = {
         "chat_id": chat_id,
         "text": text,
         "parse_mode": "Markdown",
-        **extra_payload
+        "disable_web_page_preview": True
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    return send_request(method, payload)
-
-def send_message(chat_id, text, reply_markup=None):
-    return _send_text_msg("sendMessage", chat_id, text, reply_markup, disable_web_page_preview=True)
+    send_request("sendMessage", payload)
 
 def broadcast_message(text, reply_markup=None):
     for admin_id in ALLOWED_CHAT_IDS:
         send_message(admin_id, text, reply_markup)
 
 def edit_message(chat_id, message_id, text, reply_markup=None):
-    return _send_text_msg("editMessageText", chat_id, text, reply_markup, message_id=message_id)
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    send_request("editMessageText", payload)
 
 def answer_callback(callback_id, text):
     send_request("answerCallbackQuery", {"callback_query_id": callback_id, "text": text}, timeout=5)
@@ -360,7 +358,7 @@ def read_property(key):
             for line in f:
                 if line.startswith(f"{key}="):
                     return line.strip().split("=")[1]
-    except (FileNotFoundError, IOError):
+    except:
         return "N/A"
     return "N/A"
 
@@ -428,7 +426,7 @@ def monitor_logs():
                 if state != "true":
                     time.sleep(10) # Sleep if stopped
                     continue
-            except (subprocess.SubprocessError, OSError):
+            except:
                 time.sleep(10)
                 continue
 
@@ -468,10 +466,9 @@ def monitor_logs():
                 if any(k in line for k in death_keywords) and "]: " in line:
                      msg_part = line.split("]: ", 1)[1].strip()
                      if not msg_part.startswith("<"): 
-                         title_payload = {"text": msg_part, "color": "yellow", "bold": True}
-                         subtitle_payload = {"text": "RIP ☠️", "color": "red"}
-                         rcon_command(["title", "@a", "title", json.dumps(title_payload)])
-                         rcon_command(["title", "@a", "subtitle", json.dumps(subtitle_payload)])
+                         safe_msg = msg_part.replace('"', "'")
+                         rcon_command(f'title @a title {{"text":"{safe_msg}", "color":"yellow", "bold":true}}')
+                         rcon_command(f'title @a subtitle {{"text":"RIP ☠️", "color":"red"}}')
                          broadcast_message(f"💀 *Death:* {msg_part}")
 
                 # Detect BLOCKED (Whitelist)
@@ -526,19 +523,24 @@ def get_playtime_top():
                         pass
         
         # Sort and format
-        players.sort(key=lambda x: x[1], reverse=True)
-        top_list = players[:5]
-        
-        if not top_list:
-            return "No stats available."
-
-        msg_parts = ["🏆 *Top Playtime:*\n"]
-        for i, (name, hours) in enumerate(top_list, 1):
-            msg_parts.append(f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n")
-            
-        return "".join(msg_parts)
+        return format_playtime_message(players)
     except (OSError, ValueError, AttributeError, TypeError, KeyError, IndexError) as e:
         return f"Error calculating stats: {e}"
+
+def format_playtime_message(players):
+    """Formats a list of (name, hours) tuples into a top 5 leaderboard string."""
+    # Sort by hours descending
+    players.sort(key=lambda x: x[1], reverse=True)
+    top_list = players[:5]
+
+    if not top_list:
+        return "No stats available."
+
+    msg_parts = ["🏆 *Top Playtime:*\n"]
+    for i, (name, hours) in enumerate(top_list, 1):
+        msg_parts.append(f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n")
+
+    return "".join(msg_parts)
 
 def handle_callback(cb):
     global chat_mode_enabled
@@ -743,7 +745,7 @@ def handle_callback(cb):
         if kb:
             try:
                 edit_message(chat_id, msg_id, msg, kb)
-            except Exception:
+            except:
                 send_message(chat_id, msg, kb)
         else:
              send_message(chat_id, msg)
@@ -839,17 +841,15 @@ def handle_text(msg):
     # Check for pending broadcast
     if pending_broadcast.get(chat_id):
         # Send title command
-        title_payload = {"text": text, "color": "gold", "bold": True}
-        subtitle_payload = {"text": f"From {user_name}", "color": "gray"}
-
+        safe_text = text.replace('"', "'")
         # Title command: title @a title {"text":"MESSAGE", "color":"gold"}
-        rcon_command(["title", "@a", "title", json.dumps(title_payload)])
-        rcon_command(["title", "@a", "subtitle", json.dumps(subtitle_payload)])
+        rcon_command(f'title @a title {{"text":"{safe_text}", "color":"gold", "bold":true}}')
+        rcon_command(f'title @a subtitle {{"text":"From {user_name}", "color":"gray"}}')
         
         # Also play sound
         rcon_command("execute at @a run playsound minecraft:entity.experience_orb.pickup master @p ~ ~ ~ 1 1")
         
-        send_message(chat_id, f"✅ *Broadcast Sent:*\n{text}")
+        send_message(chat_id, f"✅ *Broadcast Sent:*\n{safe_text}")
         pending_broadcast[chat_id] = False
         return
 
@@ -858,6 +858,9 @@ def handle_text(msg):
         if text.startswith("/start") or text.startswith("/help") or text.startswith("/panel"):
             status = get_server_status()
             send_message(chat_id, f"👋 *Pico Minecraft Bot*\n\n{status}\n\n{COMMANDS_HELP}", get_main_keyboard())
+            return
+
+            send_message(chat_id, msg)
             return
 
         if text.startswith("/cmd "):
@@ -901,12 +904,8 @@ def handle_text(msg):
     else:
         # Chat Relay: Send text to game (Only if chat mode is ON)
         if chat_mode_enabled:
-            tellraw_payload = [
-                "",
-                {"text": f"[{user_name}@Telegram]: ", "color": "aqua"},
-                {"text": text, "color": "white"}
-            ]
-            rcon_command(["tellraw", "@a", json.dumps(tellraw_payload)])
+            safe_text = text.replace('"', "'") # Basic sanitization
+            rcon_command(f"tellraw @a [\"\",{{\"text\":\"[{user_name}@Telegram]: \",\"color\":\"aqua\"}},{{\"text\":\"{safe_text}\",\"color\":\"white\"}}]")
 
 def monitor_resources():
     print("Resource monitor started...")
