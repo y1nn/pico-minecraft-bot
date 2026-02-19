@@ -2,7 +2,7 @@ import sys
 import os
 import unittest
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, mock_open
 
 # Mock dependencies that are not installed or have side effects on import
 sys.modules["requests"] = MagicMock()
@@ -14,13 +14,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
     import scripts.minecraft_bot as bot
-    from scripts.minecraft_bot import strip_ansi
+    from scripts.minecraft_bot import strip_ansi, format_playtime_message, get_playtime_top
 except ImportError:
     pass
 
 class TestMinecraftBot(unittest.TestCase):
 
-    # Original tests from main (converted to unittest style)
+    # --- Tests for strip_ansi (from main) ---
     def test_strip_ansi_empty(self):
         self.assertEqual(strip_ansi(""), "")
 
@@ -45,7 +45,28 @@ class TestMinecraftBot(unittest.TestCase):
         text = "Hello\x1b[2JWorld" # Clear screen
         self.assertEqual(strip_ansi(text), "HelloWorld")
 
-    # New tests for get_playtime_top
+    # --- Tests for format_playtime_message (from main's test_playtime_new.py) ---
+    def test_format_playtime_message(self):
+        players = [("Alice", 1.5), ("Bob", 2.0)]
+        msg = format_playtime_message(players)
+        self.assertIn("🏆 *Top Playtime:*", msg)
+        # Check order (Bob should be first because 2.0 > 1.5)
+        self.assertIn("1. 👤 *Bob:* `2.0 hours`", msg)
+        self.assertIn("2. 👤 *Alice:* `1.5 hours`", msg)
+
+    def test_format_playtime_message_empty(self):
+        msg = format_playtime_message([])
+        self.assertEqual(msg, "No stats available.")
+
+    def test_format_playtime_message_limit(self):
+        # Should only show top 5
+        players = [(f"P{i}", float(i)) for i in range(10)]
+        msg = format_playtime_message(players)
+        self.assertIn("1. 👤 *P9:* `9.0 hours`", msg)
+        self.assertIn("5. 👤 *P5:* `5.0 hours`", msg)
+        self.assertNotIn("6. 👤 *P4:*", msg)
+
+    # --- New Tests for get_playtime_top (Exception Handling Refactor) ---
     def setUp(self):
         # Create temporary directory structure
         self.test_dir = "/tmp/minecraft_bot_test"
