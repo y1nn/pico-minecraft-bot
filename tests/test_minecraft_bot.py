@@ -4,16 +4,22 @@ import json
 import os
 import sys
 
-# Ensure scripts can be imported
-sys.path.append(os.path.join(os.getcwd(), 'scripts'))
+# Mock dependencies that are not installed or have side effects on import
+# We do this BEFORE importing minecraft_bot to prevent ModuleNotFoundError or execution
+sys.modules["requests"] = MagicMock()
+sys.modules["dotenv"] = MagicMock()
 
-from minecraft_bot import get_playtime_top
+# Ensure scripts can be imported from root
+if os.getcwd() not in sys.path:
+    sys.path.append(os.getcwd())
+
+from scripts.minecraft_bot import get_playtime_top, strip_ansi
 
 class TestPlaytime(unittest.TestCase):
-    @patch('minecraft_bot.os.path.exists')
-    @patch('minecraft_bot.os.listdir')
-    @patch('minecraft_bot.open')
-    @patch('minecraft_bot.os.path.dirname')
+    @patch('scripts.minecraft_bot.os.path.exists')
+    @patch('scripts.minecraft_bot.os.listdir')
+    @patch('scripts.minecraft_bot.open')
+    @patch('scripts.minecraft_bot.os.path.dirname')
     def test_get_playtime_top(self, mock_dirname, mock_file_open, mock_listdir, mock_exists):
         # Setup mocks
         mock_dirname.return_value = "/data"
@@ -65,10 +71,10 @@ class TestPlaytime(unittest.TestCase):
         self.assertIn("1. 👤 *Player2:* `2.0 hours`", result)
         self.assertIn("2. 👤 *Player1:* `1.0 hours`", result)
 
-    @patch('minecraft_bot.os.path.exists')
-    @patch('minecraft_bot.os.listdir')
-    @patch('minecraft_bot.open')
-    @patch('minecraft_bot.os.path.dirname')
+    @patch('scripts.minecraft_bot.os.path.exists')
+    @patch('scripts.minecraft_bot.os.listdir')
+    @patch('scripts.minecraft_bot.open')
+    @patch('scripts.minecraft_bot.os.path.dirname')
     def test_get_playtime_top_empty(self, mock_dirname, mock_file_open, mock_listdir, mock_exists):
         # Setup mocks for empty result
         mock_dirname.return_value = "/data"
@@ -88,6 +94,31 @@ class TestPlaytime(unittest.TestCase):
         # Assertions
         print(f"Result Empty:\n{result}")
         self.assertEqual(result, "No stats available.")
+
+# Tests from main branch
+def test_strip_ansi_empty():
+    assert strip_ansi("") == ""
+
+def test_strip_ansi_no_ansi():
+    text = "Hello World"
+    assert strip_ansi(text) == text
+
+def test_strip_ansi_with_color():
+    text = "\x1b[31mRed Text\x1b[0m"
+    assert strip_ansi(text) == "Red Text"
+
+def test_strip_ansi_multiple_codes():
+    text = "\x1b[1m\x1b[32mBold Green\x1b[0m"
+    assert strip_ansi(text) == "Bold Green"
+
+def test_strip_ansi_complex():
+    text = "Normal \x1b[33mYellow\x1b[0m Mixed \x1b[44mBlueBG\x1b[0m"
+    assert strip_ansi(text) == "Normal Yellow Mixed BlueBG"
+
+def test_strip_ansi_other_escapes():
+    # Test some other CSI sequences
+    text = "Hello\x1b[2JWorld" # Clear screen
+    assert strip_ansi(text) == "HelloWorld"
 
 if __name__ == '__main__':
     unittest.main()
