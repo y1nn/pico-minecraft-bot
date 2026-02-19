@@ -529,19 +529,24 @@ def get_playtime_top():
                         pass
         
         # Sort and format
-        players.sort(key=lambda x: x[1], reverse=True)
-        top_list = players[:5]
-        
-        if not top_list:
-            return "No stats available."
-
-        msg_parts = ["🏆 *Top Playtime:*\n"]
-        for i, (name, hours) in enumerate(top_list, 1):
-            msg_parts.append(f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n")
-            
-        return "".join(msg_parts)
+        return format_playtime_message(players)
     except Exception as e:
         return f"Error calculating stats: {e}"
+
+def format_playtime_message(players):
+    """Formats a list of (name, hours) tuples into a top 5 leaderboard string."""
+    # Sort by hours descending
+    players.sort(key=lambda x: x[1], reverse=True)
+    top_list = players[:5]
+
+    if not top_list:
+        return "No stats available."
+
+    msg_parts = ["🏆 *Top Playtime:*\n"]
+    for i, (name, hours) in enumerate(top_list, 1):
+        msg_parts.append(f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n")
+
+    return "".join(msg_parts)
 
 def handle_callback(cb):
     global chat_mode_enabled
