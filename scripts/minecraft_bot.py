@@ -20,6 +20,9 @@ BACKUP_SCRIPT = os.getenv("BACKUP_SCRIPT", "./scripts/auto_backup.sh")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
+# Compiled Regex Patterns
+ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 # State to track pending broadcasts and chat mode
 pending_broadcast = {}
 chat_mode_enabled = True # Default ON
@@ -163,8 +166,7 @@ def get_server_status():
     return status_msg
 
 def strip_ansi(text):
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
+    return ANSI_ESCAPE_RE.sub('', text)
 
 def get_online_players_list():
     raw = rcon_command("list")
