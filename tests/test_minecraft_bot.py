@@ -7,10 +7,13 @@ sys.modules["dotenv"] = MagicMock()
 
 from scripts.minecraft_bot import (
     strip_ansi,
+    escape_markdown,
     parse_chat_line,
     parse_join_line,
     parse_death_line,
     parse_blocked_whitelist_line,
+    format_playtime_message,
+    get_online_players_msg,
 )
 
 def test_strip_ansi_empty():
@@ -72,3 +75,20 @@ def test_parse_blocked_whitelist_line_valid():
 def test_parse_blocked_whitelist_line_invalid():
     line = "[12:00:04] [Server thread/INFO]: Disconnecting Herobrine (Timed out)"
     assert parse_blocked_whitelist_line(line) is None
+
+def test_escape_markdown_escapes_special_characters():
+    raw = r"A_*[]()`\\B"
+    assert escape_markdown(raw) == r"A\_\*\[\]\(\)\`\\\\B"
+
+def test_format_playtime_message_escapes_player_names():
+    msg = format_playtime_message([("A_*[]()`,\\", 2.5)])
+    assert "*A\\_\\*\\[\\]\\(\\)\\`,\\\\:*" in msg
+
+def test_get_online_players_msg_escapes_inline_keyboard_text(monkeypatch):
+    from scripts import minecraft_bot
+
+    monkeypatch.setattr(minecraft_bot, "get_online_players_list", lambda: ["Bad_*[]()`,\\Name"])
+    msg, kb = get_online_players_msg()
+
+    assert "Online Players" in msg
+    assert kb["inline_keyboard"][0][0]["text"] == r"👤 Bad\_\*\[\]\(\)\`,\\Name"
