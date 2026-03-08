@@ -18,6 +18,8 @@ A powerful, standalone **Telegram Bot** to manage your Dockerized Minecraft Serv
 - **Power Actions:** Start, Stop, and Restart your server container remotely.
 - **Properties Editor:** Modify `server.properties` (PvP, Flight, Difficulty, View Distance) via an interactive UI.
 - **Backups:** Trigger instant backups and receive the zip file directly in Telegram.
+- **Auto Backups:** Optional scheduled backups with automatic retention cleanup.
+- **Auto-Recovery:** Health checks with automatic restart attempts and Telegram alerts.
 
 ### 🛡️ Security & Permissions
 - **Owner-Only Access:** Critical commands (OP, DeOP, Console) are restricted to the bot owner.
@@ -77,6 +79,13 @@ If you prefer keeping your host clean, you can run the bot in a container.
 ### `.env` notes
 - `CONTAINER_NAME` (default: `minecraft`): Docker container name used for `docker exec` and health checks.
 - `COMPOSE_FILE` (default: `docker-compose.yml`): Compose file path used when streaming logs with `docker compose -f ... logs`. Set this to an absolute path if your compose file lives elsewhere.
+- `BACKUP_SCHEDULE_MINUTES` (default: `0`): set to a value `> 0` to run automatic backups on an interval.
+- `BACKUP_RETENTION_COUNT` (default: `0`): number of newest backup files to keep in `BACKUP_DIR` after each scheduled backup.
+- `BACKUP_DIR` (default: `<PROPERTIES_FILE dir>/backups`): folder where backup files are pruned by retention.
+- `AUTO_RECOVERY_ENABLED` (default: `false`): enables automatic health checks and recovery attempts.
+- `AUTO_RECOVERY_CHECK_SECONDS` (default: `60`): health check interval in seconds.
+- `AUTO_RECOVERY_MAX_ATTEMPTS` (default: `3`): restart attempts per recovery cycle.
+- `AUTO_RECOVERY_BACKOFF_SECONDS` (default: `30`): delay between restart attempts.
 
 ## 📸 Screenshots
 

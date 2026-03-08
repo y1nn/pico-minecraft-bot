@@ -37,12 +37,33 @@ def parse_allowed_chat_ids(raw_ids):
     return chat_ids
 
 
+def parse_bool_env(var_name, default=False):
+    """Parses truthy/falsey environment flags with fallback."""
+    raw_value = os.getenv(var_name)
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 ALLOWED_CHAT_IDS = parse_allowed_chat_ids(os.getenv("ALLOWED_CHAT_IDS", ""))
 OWNER_ID = parse_int_env("OWNER_ID", default=0)
 CONTAINER_NAME = os.getenv("CONTAINER_NAME", "minecraft")
 PROPERTIES_FILE = os.getenv("PROPERTIES_FILE", "/data/server.properties")
 BACKUP_SCRIPT = os.getenv("BACKUP_SCRIPT", "./scripts/auto_backup.sh")
 COMPOSE_FILE = os.getenv("COMPOSE_FILE", "docker-compose.yml")
+BACKUP_DIR = os.getenv("BACKUP_DIR", os.path.join(os.path.dirname(PROPERTIES_FILE), "backups"))
+BACKUP_SCHEDULE_MINUTES = max(parse_int_env("BACKUP_SCHEDULE_MINUTES", default=0), 0)
+BACKUP_RETENTION_COUNT = max(parse_int_env("BACKUP_RETENTION_COUNT", default=0), 0)
+AUTO_RECOVERY_ENABLED = parse_bool_env("AUTO_RECOVERY_ENABLED", default=False)
+AUTO_RECOVERY_CHECK_SECONDS = max(parse_int_env("AUTO_RECOVERY_CHECK_SECONDS", default=60), 10)
+AUTO_RECOVERY_MAX_ATTEMPTS = max(parse_int_env("AUTO_RECOVERY_MAX_ATTEMPTS", default=3), 1)
+AUTO_RECOVERY_BACKOFF_SECONDS = max(parse_int_env("AUTO_RECOVERY_BACKOFF_SECONDS", default=30), 0)
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
@@ -146,6 +167,56 @@ def run_backup():
             return "❌ Backup script not found."
     except Exception as e:
         return f"❌ Error starting backup: {e}"
+
+def run_backup_blocking():
+    """Runs backup script synchronously and returns (ok, message)."""
+    if not os.path.exists(BACKUP_SCRIPT):
+        return False, "❌ Backup script not found."
+
+    try:
+        result = subprocess.run(
+            [BACKUP_SCRIPT],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        if result.returncode != 0:
+            error_output = (result.stderr or result.stdout or "Unknown error").strip()
+            return False, f"❌ Scheduled backup failed:\n`{escape_markdown(error_output[:350])}`"
+        return True, "✅ Scheduled backup completed."
+    except subprocess.TimeoutExpired:
+        return False, "❌ Scheduled backup timed out after 15 minutes."
+    except Exception as e:
+        return False, f"❌ Scheduled backup error: {escape_markdown(e)}"
+
+def apply_backup_retention():
+    """Deletes old backups based on BACKUP_RETENTION_COUNT."""
+    if BACKUP_RETENTION_COUNT <= 0:
+        return 0
+    if not os.path.isdir(BACKUP_DIR):
+        return 0
+
+    try:
+        files = []
+        for name in os.listdir(BACKUP_DIR):
+            full_path = os.path.join(BACKUP_DIR, name)
+            if os.path.isfile(full_path):
+                files.append(full_path)
+
+        files.sort(key=os.path.getmtime, reverse=True)
+        old_files = files[BACKUP_RETENTION_COUNT:]
+
+        removed = 0
+        for file_path in old_files:
+            try:
+                os.remove(file_path)
+                removed += 1
+            except OSError:
+                continue
+        return removed
+    except OSError:
+        return 0
 
 def get_whitelist_state():
     try:
@@ -1064,6 +1135,119 @@ def monitor_resources():
         
         time.sleep(3600) # Check every hour
 
+def monitor_scheduled_backups():
+    if BACKUP_SCHEDULE_MINUTES <= 0:
+        print("Scheduled backups disabled (BACKUP_SCHEDULE_MINUTES <= 0).")
+        return
+
+    interval_seconds = BACKUP_SCHEDULE_MINUTES * 60
+    print(f"Scheduled backups enabled every {BACKUP_SCHEDULE_MINUTES} minute(s).")
+
+    # Delay first run to avoid immediate trigger on startup.
+    time.sleep(interval_seconds)
+
+    while True:
+        ok, backup_message = run_backup_blocking()
+        if ok:
+            removed_count = apply_backup_retention()
+            if BACKUP_RETENTION_COUNT > 0:
+                backup_message = (
+                    f"{backup_message}\n🧹 Retention: keep `{BACKUP_RETENTION_COUNT}` file(s), "
+                    f"removed `{removed_count}` old file(s)."
+                )
+
+        broadcast_message(backup_message)
+        time.sleep(interval_seconds)
+
+
+def is_server_responsive():
+    """Checks whether the Minecraft service is running and responding to RCON."""
+    try:
+        container_running = subprocess.check_output(
+            ["docker", "inspect", "-f", "{{.State.Running}}", CONTAINER_NAME],
+            timeout=5,
+        ).strip().decode().lower()
+    except (subprocess.SubprocessError, OSError) as e:
+        return False, f"container inspect failed: {e}"
+
+    if container_running != "true":
+        return False, "container not running"
+
+    rcon_output = strip_ansi(rcon_command("list")).strip()
+    if not rcon_output:
+        return False, "empty RCON response"
+
+    lowered = rcon_output.lower()
+    bad_markers = ["error", "failed", "timeout", "connection refused"]
+    if any(marker in lowered for marker in bad_markers):
+        return False, rcon_output
+
+    return True, "ok"
+
+
+def attempt_auto_recovery():
+    """Attempts to restart and re-check health. Returns (ok, attempts, details)."""
+    last_error = ""
+
+    for attempt in range(1, AUTO_RECOVERY_MAX_ATTEMPTS + 1):
+        try:
+            subprocess.run(["docker", "restart", CONTAINER_NAME], check=True, timeout=60)
+        except Exception as e:
+            last_error = f"restart failed: {e}"
+            if attempt < AUTO_RECOVERY_MAX_ATTEMPTS:
+                time.sleep(AUTO_RECOVERY_BACKOFF_SECONDS)
+            continue
+
+        time.sleep(5)
+        healthy, details = is_server_responsive()
+        if healthy:
+            return True, attempt, "server recovered"
+
+        last_error = f"restart attempt {attempt} unhealthy: {details}"
+        if attempt < AUTO_RECOVERY_MAX_ATTEMPTS:
+            time.sleep(AUTO_RECOVERY_BACKOFF_SECONDS)
+
+    return False, AUTO_RECOVERY_MAX_ATTEMPTS, last_error or "unknown failure"
+
+
+def monitor_auto_recovery():
+    if not AUTO_RECOVERY_ENABLED:
+        print("Auto-recovery disabled (AUTO_RECOVERY_ENABLED=false).")
+        return
+
+    print(
+        "Auto-recovery enabled "
+        f"(check={AUTO_RECOVERY_CHECK_SECONDS}s, attempts={AUTO_RECOVERY_MAX_ATTEMPTS}, "
+        f"backoff={AUTO_RECOVERY_BACKOFF_SECONDS}s)."
+    )
+
+    while True:
+        healthy, reason = is_server_responsive()
+        if not healthy:
+            safe_reason = escape_markdown(reason)
+            broadcast_message(
+                "⚠️ *Auto-Recovery Triggered*\n"
+                f"Reason: `{safe_reason}`\n"
+                "Attempting automatic restart..."
+            )
+
+            recovered, attempts, details = attempt_auto_recovery()
+            safe_details = escape_markdown(details)
+            if recovered:
+                broadcast_message(
+                    "✅ *Auto-Recovery Success*\n"
+                    f"Recovered after `{attempts}` attempt(s)."
+                )
+            else:
+                broadcast_message(
+                    "❌ *Auto-Recovery Failed*\n"
+                    f"Attempts: `{attempts}`\n"
+                    f"Details: `{safe_details}`"
+                )
+
+        time.sleep(AUTO_RECOVERY_CHECK_SECONDS)
+
+
 def main():
     print("Bot Premium V9 (Chat Toggle + Resource Monitor) started...")
     
@@ -1074,6 +1258,14 @@ def main():
     # Resource Monitor Thread
     t_res = threading.Thread(target=monitor_resources, daemon=True)
     t_res.start()
+
+    # Scheduled Backup Monitor Thread
+    t_backup = threading.Thread(target=monitor_scheduled_backups, daemon=True)
+    t_backup.start()
+
+    # Auto-Recovery Monitor Thread
+    t_recovery = threading.Thread(target=monitor_auto_recovery, daemon=True)
+    t_recovery.start()
     
     last_update_id = None
     
