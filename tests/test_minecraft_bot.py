@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 sys.modules["requests"] = MagicMock()
 sys.modules["dotenv"] = MagicMock()
 
-from scripts.minecraft_bot import strip_ansi
+from scripts.minecraft_bot import strip_ansi, parse_chat_line
 
 def test_strip_ansi_empty():
     assert strip_ansi("") == ""
@@ -30,3 +30,11 @@ def test_strip_ansi_other_escapes():
     # Test some other CSI sequences
     text = "Hello\x1b[2JWorld" # Clear screen
     assert strip_ansi(text) == "HelloWorld"
+
+def test_parse_chat_line_valid():
+    line = "[12:00:00] [Server thread/INFO]: <Steve> hello there"
+    assert parse_chat_line(line) == ("Steve", "hello there")
+
+def test_parse_chat_line_invalid():
+    line = "[12:00:00] [Server thread/INFO]: Steve joined the game"
+    assert parse_chat_line(line) is None
