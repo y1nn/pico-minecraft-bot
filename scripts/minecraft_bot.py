@@ -12,8 +12,33 @@ load_dotenv()
 
 # Configuration
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ALLOWED_CHAT_IDS = [int(id) for id in os.getenv("ALLOWED_CHAT_IDS", "").split(",") if id]
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+
+
+def parse_int_env(var_name, default=0):
+    """Parses an integer environment variable with fallback."""
+    raw_value = os.getenv(var_name, str(default)).strip()
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
+
+
+def parse_allowed_chat_ids(raw_ids):
+    """Parses comma-separated chat IDs, ignoring invalid values."""
+    chat_ids = []
+    for raw_id in raw_ids.split(","):
+        candidate = raw_id.strip()
+        if not candidate:
+            continue
+        try:
+            chat_ids.append(int(candidate))
+        except ValueError:
+            continue
+    return chat_ids
+
+
+ALLOWED_CHAT_IDS = parse_allowed_chat_ids(os.getenv("ALLOWED_CHAT_IDS", ""))
+OWNER_ID = parse_int_env("OWNER_ID", default=0)
 CONTAINER_NAME = os.getenv("CONTAINER_NAME", "minecraft")
 PROPERTIES_FILE = os.getenv("PROPERTIES_FILE", "/data/server.properties")
 BACKUP_SCRIPT = os.getenv("BACKUP_SCRIPT", "./scripts/auto_backup.sh")

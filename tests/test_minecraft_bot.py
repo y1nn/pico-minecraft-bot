@@ -14,6 +14,8 @@ from scripts.minecraft_bot import (
     parse_blocked_whitelist_line,
     format_playtime_message,
     get_online_players_msg,
+    parse_allowed_chat_ids,
+    parse_int_env,
 )
 
 def test_strip_ansi_empty():
@@ -92,3 +94,12 @@ def test_get_online_players_msg_escapes_inline_keyboard_text(monkeypatch):
 
     assert "Online Players" in msg
     assert kb["inline_keyboard"][0][0]["text"] == r"👤 Bad\_\*\[\]\(\)\`,\\Name"
+
+def test_parse_allowed_chat_ids_ignores_invalid_values():
+    raw = "123, abc, , -100456, 42x, 7"
+    assert parse_allowed_chat_ids(raw) == [123, -100456, 7]
+
+
+def test_parse_int_env_returns_default_on_invalid(monkeypatch):
+    monkeypatch.setenv("OWNER_ID", "not-a-number")
+    assert parse_int_env("OWNER_ID", default=99) == 99
