@@ -23,6 +23,7 @@ BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
 # Compiled Regex Patterns
 ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+MARKDOWN_ESCAPE_RE = re.compile(r'([\\`*_\[\]()])')
 JOIN_LINE_RE = re.compile(r": (.*?) joined the game")
 DEATH_LINE_RE = re.compile(r"\]: (.*)")
 BLOCKED_WHITELIST_RE = re.compile(r"Disconnecting (.*?) \(")
@@ -186,6 +187,10 @@ def get_server_status():
 def strip_ansi(text):
     return ANSI_ESCAPE_RE.sub('', text)
 
+def escape_markdown(text):
+    """Escapes user-derived text for Telegram Markdown parse mode."""
+    return MARKDOWN_ESCAPE_RE.sub(r"\\\1", str(text))
+
 def parse_chat_line(line):
     """Extracts (player, message) from a Minecraft chat log line."""
     if "]: <" not in line or "> " not in line:
@@ -261,7 +266,7 @@ def get_online_players_msg():
     keyboard = {"inline_keyboard": []}
     row = []
     for p in players:
-        row.append({"text": f"👤 {p}", "callback_data": f"manage:{p}"})
+        row.append({"text": f"👤 {escape_markdown(p)}", "callback_data": f"manage:{p}"})
         if len(row) == 2:
            keyboard["inline_keyboard"].append(row)
            row = []
@@ -307,7 +312,7 @@ def get_whitelist():
         names = clean_raw.split(":", 1)[1].strip()
         if not names:
              return "📭 *Whitelist is empty.*\nUse `/add <name>` to add players."
-        formatted_names = ", ".join([f"`{n.strip()}`" for n in names.split(",") if n.strip()])
+        formatted_names = ", ".join([f"`{escape_markdown(n.strip())}`" for n in names.split(",") if n.strip()])
         return f"📜 *Whitelisted Players:*\n{formatted_names}"
     return raw
 
@@ -517,14 +522,17 @@ def monitor_logs():
                 # Detect JOIN
                 player = parse_join_line(line)
                 if player:
-                    msg = f"🟢 *Player Joined!*\n👤 `{player}`"
+                    safe_player = escape_markdown(player)
+                    msg = f"🟢 *Player Joined!*\n👤 `{safe_player}`"
                     broadcast_message(msg)
 
                 # Detect CHAT (Relay to Telegram)
                 chat_data = parse_chat_line(line)
                 if chat_mode_enabled and chat_data:
                     player, message = chat_data
-                    msg = f"💬 *{player}:* {message}"
+                    safe_player = escape_markdown(player)
+                    safe_message = escape_markdown(message)
+                    msg = f"💬 *{safe_player}:* {safe_message}"
                     broadcast_message(msg)
                 
                 # Detect DEATH (Funny Broadcast)
@@ -534,17 +542,18 @@ def monitor_logs():
                     subtitle_payload = {"text": "RIP ☠️", "color": "red"}
                     rcon_command(["title", "@a", "title", json.dumps(title_payload)])
                     rcon_command(["title", "@a", "subtitle", json.dumps(subtitle_payload)])
-                    broadcast_message(f"💀 *Death:* {msg_part}")
+                    broadcast_message(f"💀 *Death:* {escape_markdown(msg_part)}")
 
                 # Detect BLOCKED (Whitelist)
                 player = parse_blocked_whitelist_line(line)
                 if player:
+                    safe_player = escape_markdown(player)
                     kb = {
                         "inline_keyboard": [[
-                            {"text": f"✅ Add {player}", "callback_data": f"quick_add:{player}"}
+                            {"text": f"✅ Add {safe_player}", "callback_data": f"quick_add:{player}"}
                         ]]
                     }
-                    msg = f"🚨 *Blocked Connection!*\n👤 `{player}` tried to join."
+                    msg = f"🚨 *Blocked Connection!*\n👤 `{safe_player}` tried to join."
                     broadcast_message(msg, kb)
         except Exception as e:
             print(f"Monitor error: {e}")
@@ -601,7 +610,8 @@ def format_playtime_message(players):
 
     msg_parts = ["🏆 *Top Playtime:*\n"]
     for i, (name, hours) in enumerate(top_list, 1):
-        msg_parts.append(f"{i}. 👤 *{name}:* `{hours:.1f} hours`\n")
+        safe_name = escape_markdown(name)
+        msg_parts.append(f"{i}. 👤 *{safe_name}:* `{hours:.1f} hours`\n")
 
     return "".join(msg_parts)
 
@@ -734,9 +744,10 @@ def handle_callback(cb):
 
     if data.startswith("quick_add:"):
         player_name = data.split(":")[1]
+        safe_player_name = escape_markdown(player_name)
         rcon_command(f"whitelist add {player_name}")
         rcon_command("whitelist reload")
-        edit_message(chat_id, msg_id, f"✅ *Added {player_name} to whitelist!*\nThey can join now.")
+        edit_message(chat_id, msg_id, f"✅ *Added {safe_player_name} to whitelist!*\nThey can join now.")
         answer_callback(cb_id, f"Added {player_name}")
         return
 
@@ -817,7 +828,8 @@ def handle_callback(cb):
     # Player Management Handlers
     if data.startswith("manage:"):
         player = data.split(":")[1]
-        edit_message(chat_id, msg_id, f"👤 Managing *{player}*:", get_player_action_keyboard(player, chat_id))
+        safe_player = escape_markdown(player)
+        edit_message(chat_id, msg_id, f"👤 Managing *{safe_player}*:", get_player_action_keyboard(player, chat_id))
         return
         
     if data.startswith("gm:"):
@@ -846,16 +858,18 @@ def handle_callback(cb):
         
     if data.startswith("ban:"):
         player = data.split(":")[1]
+        safe_player = escape_markdown(player)
         rcon_command(f"ban {player}")
         answer_callback(cb_id, f"{player} BANNED 🔨")
-        edit_message(chat_id, msg_id, f"🔨 *{player}* has been BANNED.", get_player_action_keyboard(player, chat_id))
+        edit_message(chat_id, msg_id, f"🔨 *{safe_player}* has been BANNED.", get_player_action_keyboard(player, chat_id))
         return
 
     if data.startswith("unban:"):
         player = data.split(":")[1]
+        safe_player = escape_markdown(player)
         rcon_command(f"pardon {player}")
         answer_callback(cb_id, f"{player} UNBANNED 🔓")
-        edit_message(chat_id, msg_id, f"🔓 *{player}* has been UNBANNED.", get_player_action_keyboard(player, chat_id))
+        edit_message(chat_id, msg_id, f"🔓 *{safe_player}* has been UNBANNED.", get_player_action_keyboard(player, chat_id))
         return
         
     if data.startswith("kick:"):
@@ -950,18 +964,24 @@ def handle_text(msg):
             player = parts[1]
             out = rcon_command(f"whitelist add {player}")
             rcon_command("whitelist reload")
-            send_message(chat_id, f"✅ *Added:* {player}\n`{out}`")
+            safe_player = escape_markdown(player)
+            safe_out = escape_markdown(out)
+            send_message(chat_id, f"✅ *Added:* {safe_player}\n`{safe_out}`")
             
         elif cmd == "/remove" and len(parts) > 1:
             player = parts[1]
             out = rcon_command(f"whitelist remove {player}")
             rcon_command("whitelist reload")
-            send_message(chat_id, f"❌ *Removed:* {player}\n`{out}`")
+            safe_player = escape_markdown(player)
+            safe_out = escape_markdown(out)
+            send_message(chat_id, f"❌ *Removed:* {safe_player}\n`{safe_out}`")
             
         elif cmd == "/kick" and len(parts) > 1:
             player = parts[1]
             out = rcon_command(f"kick {player}")
-            send_message(chat_id, f"🥾 *Kicked:* {player}\n`{out}`")
+            safe_player = escape_markdown(player)
+            safe_out = escape_markdown(out)
+            send_message(chat_id, f"🥾 *Kicked:* {safe_player}\n`{safe_out}`")
     
     else:
         # Chat Relay: Send text to game (Only if chat mode is ON)
