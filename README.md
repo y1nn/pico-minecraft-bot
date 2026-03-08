@@ -55,7 +55,7 @@ python3 setup.py
 ```
 This script will:
 1.  Ask for your **Bot Token** and **ID**.
-2.  Create the `.env` configuration file.
+2.  Create the `.env` configuration file (includes `COMPOSE_FILE`, default `docker-compose.yml`).
 3.  **(Optional)** Install the bot as a **system service** effectively handling step 4 automatically!
 
 ---
@@ -64,13 +64,19 @@ This script will:
 
 If you prefer keeping your host clean, you can run the bot in a container.
 
-1.  **Configure**: Create `.env` using `setup.py` or manually.
+1.  **Configure**: Create `.env` using `setup.py` or manually. You can also copy `.env.example` as a starting point.
 2.  **Edit**: Open `docker-compose.yml` and **mount your Minecraft data**.
     *   *The bot needs access to `server.properties` to edit settings!*
 3.  **Run**:
     ```bash
     docker-compose up -d
     ```
+
+
+
+### `.env` notes
+- `CONTAINER_NAME` (default: `minecraft`): Docker container name used for `docker exec` and health checks.
+- `COMPOSE_FILE` (default: `docker-compose.yml`): Compose file path used when streaming logs with `docker compose -f ... logs`. Set this to an absolute path if your compose file lives elsewhere.
 
 ## 📸 Screenshots
 
@@ -103,6 +109,7 @@ If you prefer keeping your host clean, you can run the bot in a container.
 
 ### ⚠️ "RCON Connection Failed"
 - Make sure the `CONTAINER_NAME` in `.env` matches your actual Docker container name.
+- If logs are not streaming, set `COMPOSE_FILE` in `.env` to the compose file that runs your Minecraft stack (default is `docker-compose.yml`).
 - Verify the bot is running on the *same machine* as the Docker container.
 
 ## 🤝 Contributing
