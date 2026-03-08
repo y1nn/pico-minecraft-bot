@@ -23,6 +23,23 @@ BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
 # Compiled Regex Patterns
 ANSI_ESCAPE_RE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+JOIN_LINE_RE = re.compile(r": (.*?) joined the game")
+DEATH_LINE_RE = re.compile(r"\]: (.*)")
+BLOCKED_WHITELIST_RE = re.compile(r"Disconnecting (.*?) \(")
+DEATH_KEYWORDS = [
+    "slain by",
+    "shot by",
+    "blew up",
+    "burned to death",
+    "fell from",
+    "drowned",
+    "starved",
+    "suffocated",
+    "withered",
+    "died",
+    "killed by",
+    "hit the ground",
+]
 
 # State to track pending broadcasts and chat mode
 pending_broadcast = {}
@@ -179,6 +196,45 @@ def parse_chat_line(line):
         return None
 
     return match.group(1), match.group(2)
+
+def parse_join_line(line):
+    """Extracts player name from a join event log line."""
+    if "joined the game" not in line:
+        return None
+
+    match = JOIN_LINE_RE.search(line)
+    if not match:
+        return None
+
+    return match.group(1)
+
+def parse_death_line(line):
+    """Extracts death message from a death event log line."""
+    if "]: " not in line:
+        return None
+    if not any(keyword in line for keyword in DEATH_KEYWORDS):
+        return None
+
+    match = DEATH_LINE_RE.search(line)
+    if not match:
+        return None
+
+    msg = match.group(1).strip()
+    if msg.startswith("<"):
+        return None
+
+    return msg
+
+def parse_blocked_whitelist_line(line):
+    """Extracts player name from a blocked whitelist disconnect log line."""
+    if "You are not white-listed" not in line or "Disconnecting" not in line:
+        return None
+
+    match = BLOCKED_WHITELIST_RE.search(line)
+    if not match:
+        return None
+
+    return match.group(1)
 
 def get_online_players_list():
     raw = rcon_command("list")
@@ -459,12 +515,10 @@ def monitor_logs():
                     
                 line = line.strip()
                 # Detect JOIN
-                if "joined the game" in line:
-                    match = re.search(r": (.*?) joined the game", line)
-                    if match:
-                        player = match.group(1)
-                        msg = f"🟢 *Player Joined!*\n👤 `{player}`"
-                        broadcast_message(msg)
+                player = parse_join_line(line)
+                if player:
+                    msg = f"🟢 *Player Joined!*\n👤 `{player}`"
+                    broadcast_message(msg)
 
                 # Detect CHAT (Relay to Telegram)
                 chat_data = parse_chat_line(line)
@@ -474,28 +528,24 @@ def monitor_logs():
                     broadcast_message(msg)
                 
                 # Detect DEATH (Funny Broadcast)
-                death_keywords = ["slain by", "shot by", "blew up", "burned to death", "fell from", "drowned", "starved", "suffocated", "withered", "died", "killed by", "hit the ground"]
-                if any(k in line for k in death_keywords) and "]: " in line:
-                     msg_part = line.split("]: ", 1)[1].strip()
-                     if not msg_part.startswith("<"): 
-                         title_payload = {"text": msg_part, "color": "yellow", "bold": True}
-                         subtitle_payload = {"text": "RIP ☠️", "color": "red"}
-                         rcon_command(["title", "@a", "title", json.dumps(title_payload)])
-                         rcon_command(["title", "@a", "subtitle", json.dumps(subtitle_payload)])
-                         broadcast_message(f"💀 *Death:* {msg_part}")
+                msg_part = parse_death_line(line)
+                if msg_part:
+                    title_payload = {"text": msg_part, "color": "yellow", "bold": True}
+                    subtitle_payload = {"text": "RIP ☠️", "color": "red"}
+                    rcon_command(["title", "@a", "title", json.dumps(title_payload)])
+                    rcon_command(["title", "@a", "subtitle", json.dumps(subtitle_payload)])
+                    broadcast_message(f"💀 *Death:* {msg_part}")
 
                 # Detect BLOCKED (Whitelist)
-                if "You are not white-listed" in line and "Disconnecting" in line:
-                    match = re.search(r"Disconnecting (.*?) \(", line)
-                    if match:
-                        player = match.group(1)
-                        kb = {
-                            "inline_keyboard": [[
-                                {"text": f"✅ Add {player}", "callback_data": f"quick_add:{player}"}
-                            ]]
-                        }
-                        msg = f"🚨 *Blocked Connection!*\n👤 `{player}` tried to join."
-                        broadcast_message(msg, kb)
+                player = parse_blocked_whitelist_line(line)
+                if player:
+                    kb = {
+                        "inline_keyboard": [[
+                            {"text": f"✅ Add {player}", "callback_data": f"quick_add:{player}"}
+                        ]]
+                    }
+                    msg = f"🚨 *Blocked Connection!*\n👤 `{player}` tried to join."
+                    broadcast_message(msg, kb)
         except Exception as e:
             print(f"Monitor error: {e}")
             time.sleep(5)
