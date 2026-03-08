@@ -1,4 +1,5 @@
 import sys
+import os
 from unittest.mock import MagicMock
 
 # Mock dependencies that are not installed or have side effects on import
@@ -16,8 +17,13 @@ from scripts.minecraft_bot import (
     get_online_players_msg,
     parse_allowed_chat_ids,
     parse_int_env,
+    parse_bool_env,
     update_property,
     read_property,
+    apply_backup_retention,
+    run_backup_blocking,
+    is_server_responsive,
+    attempt_auto_recovery,
 )
 
 def test_strip_ansi_empty():
@@ -148,3 +154,84 @@ def test_handle_text_broadcast_confirmation_escapes_markdown(monkeypatch):
     assert sent[0][0] == 123
     assert sent[0][1] == f"✅ *Broadcast Sent:*\n{bot.escape_markdown('A_*[]()`')}"
     assert bot.pending_broadcast[123] is False
+
+
+def test_apply_backup_retention_keeps_latest_files(tmp_path, monkeypatch):
+    from scripts import minecraft_bot as bot
+
+    file_old = tmp_path / "old.zip"
+    file_mid = tmp_path / "mid.zip"
+    file_new = tmp_path / "new.zip"
+
+    file_old.write_text("a")
+    file_mid.write_text("b")
+    file_new.write_text("c")
+
+    # Ensure deterministic mtimes
+    os.utime(file_old, (1000, 1000))
+    os.utime(file_mid, (2000, 2000))
+    os.utime(file_new, (3000, 3000))
+
+    monkeypatch.setattr(bot, "BACKUP_DIR", str(tmp_path))
+    monkeypatch.setattr(bot, "BACKUP_RETENTION_COUNT", 2)
+
+    removed = apply_backup_retention()
+
+    assert removed == 1
+    assert not file_old.exists()
+    assert file_mid.exists()
+    assert file_new.exists()
+
+
+def test_run_backup_blocking_handles_missing_script(monkeypatch):
+    from scripts import minecraft_bot as bot
+
+    monkeypatch.setattr(bot, "BACKUP_SCRIPT", "./scripts/does-not-exist.sh")
+
+    ok, msg = run_backup_blocking()
+
+    assert ok is False
+    assert "Backup script not found" in msg
+
+
+def test_parse_bool_env_accepts_truthy_and_fallback(monkeypatch):
+    monkeypatch.setenv("AUTO_RECOVERY_ENABLED", "yes")
+    assert parse_bool_env("AUTO_RECOVERY_ENABLED", default=False) is True
+
+    monkeypatch.setenv("AUTO_RECOVERY_ENABLED", "unknown")
+    assert parse_bool_env("AUTO_RECOVERY_ENABLED", default=False) is False
+
+
+def test_is_server_responsive_fails_when_container_stopped(monkeypatch):
+    from scripts import minecraft_bot as bot
+
+    monkeypatch.setattr(bot.subprocess, "check_output", lambda *_a, **_k: b"false")
+
+    ok, reason = is_server_responsive()
+
+    assert ok is False
+    assert reason == "container not running"
+
+
+def test_attempt_auto_recovery_succeeds_after_restart(monkeypatch):
+    from scripts import minecraft_bot as bot
+
+    monkeypatch.setattr(bot, "AUTO_RECOVERY_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(bot, "AUTO_RECOVERY_BACKOFF_SECONDS", 0)
+
+    restart_calls = []
+
+    def fake_run(cmd, check, timeout):
+        restart_calls.append(cmd)
+        return None
+
+    monkeypatch.setattr(bot.subprocess, "run", fake_run)
+    monkeypatch.setattr(bot, "is_server_responsive", lambda: (True, "ok"))
+    monkeypatch.setattr(bot.time, "sleep", lambda *_a, **_k: None)
+
+    ok, attempts, details = attempt_auto_recovery()
+
+    assert ok is True
+    assert attempts == 1
+    assert details == "server recovered"
+    assert restart_calls
