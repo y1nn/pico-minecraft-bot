@@ -461,7 +461,8 @@ def monitor_logs():
                         player = match.group(1)
                         message = match.group(2)
                         msg = f"💬 *{player}:* {message}"
-                        broadcast_message(msg)
+                        if chat_mode_enabled:
+                            broadcast_message(msg)
                 
                 # Detect DEATH (Funny Broadcast)
                 death_keywords = ["slain by", "shot by", "blew up", "burned to death", "fell from", "drowned", "starved", "suffocated", "withered", "died", "killed by", "hit the ground"]

@@ -30,3 +30,80 @@ def test_strip_ansi_other_escapes():
     # Test some other CSI sequences
     text = "Hello\x1b[2JWorld" # Clear screen
     assert strip_ansi(text) == "HelloWorld"
+
+
+class _FakeStdout:
+    def __init__(self, lines):
+        self._lines = iter(lines)
+
+    def readline(self):
+        return next(self._lines)
+
+
+class _FakeProcess:
+    def __init__(self, lines):
+        self.stdout = _FakeStdout(lines)
+
+
+def test_monitor_logs_chat_not_relayed_when_chat_mode_disabled(monkeypatch):
+    from scripts import minecraft_bot
+
+    chat_line = "[12:00:00] [Server thread/INFO]: <Steve> Hello\n"
+    fake_process = _FakeProcess([chat_line, ""])
+
+    broadcast_calls = []
+
+    def fake_broadcast(message, reply_markup=None):
+        broadcast_calls.append((message, reply_markup))
+
+    check_output_calls = iter([b"true\n"])
+
+    def fake_check_output(*args, **kwargs):
+        try:
+            return next(check_output_calls)
+        except StopIteration:
+            raise KeyboardInterrupt()
+
+    monkeypatch.setattr(minecraft_bot, "chat_mode_enabled", False)
+    monkeypatch.setattr(minecraft_bot.subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(minecraft_bot.subprocess, "Popen", lambda *a, **k: fake_process)
+    monkeypatch.setattr(minecraft_bot, "broadcast_message", fake_broadcast)
+
+    try:
+        minecraft_bot.monitor_logs()
+    except KeyboardInterrupt:
+        pass
+
+    assert broadcast_calls == []
+
+
+def test_monitor_logs_chat_relayed_once_when_chat_mode_enabled(monkeypatch):
+    from scripts import minecraft_bot
+
+    chat_line = "[12:00:00] [Server thread/INFO]: <Steve> Hello\n"
+    fake_process = _FakeProcess([chat_line, ""])
+
+    broadcast_calls = []
+
+    def fake_broadcast(message, reply_markup=None):
+        broadcast_calls.append((message, reply_markup))
+
+    check_output_calls = iter([b"true\n"])
+
+    def fake_check_output(*args, **kwargs):
+        try:
+            return next(check_output_calls)
+        except StopIteration:
+            raise KeyboardInterrupt()
+
+    monkeypatch.setattr(minecraft_bot, "chat_mode_enabled", True)
+    monkeypatch.setattr(minecraft_bot.subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(minecraft_bot.subprocess, "Popen", lambda *a, **k: fake_process)
+    monkeypatch.setattr(minecraft_bot, "broadcast_message", fake_broadcast)
+
+    try:
+        minecraft_bot.monitor_logs()
+    except KeyboardInterrupt:
+        pass
+
+    assert broadcast_calls == [("💬 *Steve:* Hello", None)]
