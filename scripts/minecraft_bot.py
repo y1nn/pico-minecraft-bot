@@ -152,7 +152,7 @@ def get_whitelist_state():
         with open(PROPERTIES_FILE, "r") as f:
             for line in f:
                 if line.strip().startswith("white-list="):
-                    state = line.strip().split("=")[1].lower()
+                    state = line.strip().split("=", 1)[1].lower()
                     return state == "true"
     except (FileNotFoundError, IOError):
         return None
@@ -457,7 +457,7 @@ def read_property(key):
         with open(PROPERTIES_FILE, "r") as f:
             for line in f:
                 if line.startswith(f"{key}="):
-                    return line.strip().split("=")[1]
+                    return line.strip().split("=", 1)[1]
     except (FileNotFoundError, IOError):
         return "N/A"
     return "N/A"
@@ -467,13 +467,20 @@ def update_property(key, value):
         lines = []
         with open(PROPERTIES_FILE, "r") as f:
             lines = f.readlines()
-        
+
+        key_found = False
         with open(PROPERTIES_FILE, "w") as f:
             for line in lines:
                 if line.startswith(f"{key}="):
                     f.write(f"{key}={value}\n")
+                    key_found = True
                 else:
                     f.write(line)
+
+            if not key_found:
+                if lines and not lines[-1].endswith("\n"):
+                    f.write("\n")
+                f.write(f"{key}={value}\n")
     except Exception as e:
         print(f"Error updating property: {e}")
 
@@ -953,7 +960,8 @@ def handle_text(msg):
         # Also play sound
         rcon_command("execute at @a run playsound minecraft:entity.experience_orb.pickup master @p ~ ~ ~ 1 1")
         
-        send_message(chat_id, f"✅ *Broadcast Sent:*\n{text}")
+        safe_text = escape_markdown(text)
+        send_message(chat_id, f"✅ *Broadcast Sent:*\n{safe_text}")
         pending_broadcast[chat_id] = False
         return
 
