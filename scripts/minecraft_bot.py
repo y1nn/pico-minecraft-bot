@@ -168,6 +168,17 @@ def get_server_status():
 def strip_ansi(text):
     return ANSI_ESCAPE_RE.sub('', text)
 
+def parse_chat_line(line):
+    """Extracts (player, message) from a Minecraft chat log line."""
+    if "]: <" not in line or "> " not in line:
+        return None
+
+    match = re.search(r": <(.*?)> (.*)", line)
+    if not match:
+        return None
+
+    return match.group(1), match.group(2)
+
 def get_online_players_list():
     raw = rcon_command("list")
     # Clean raw output first
@@ -455,13 +466,11 @@ def monitor_logs():
                         broadcast_message(msg)
 
                 # Detect CHAT (Relay to Telegram)
-                if "]: <" in line and "> " in line:
-                    match = re.search(r": <(.*?)> (.*)", line)
-                    if match:
-                        player = match.group(1)
-                        message = match.group(2)
-                        msg = f"💬 *{player}:* {message}"
-                        broadcast_message(msg)
+                chat_data = parse_chat_line(line)
+                if chat_mode_enabled and chat_data:
+                    player, message = chat_data
+                    msg = f"💬 *{player}:* {message}"
+                    broadcast_message(msg)
                 
                 # Detect DEATH (Funny Broadcast)
                 death_keywords = ["slain by", "shot by", "blew up", "burned to death", "fell from", "drowned", "starved", "suffocated", "withered", "died", "killed by", "hit the ground"]
