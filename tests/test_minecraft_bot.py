@@ -16,6 +16,8 @@ from scripts.minecraft_bot import (
     get_online_players_msg,
     parse_allowed_chat_ids,
     parse_int_env,
+    update_property,
+    read_property,
 )
 
 def test_strip_ansi_empty():
@@ -103,3 +105,46 @@ def test_parse_allowed_chat_ids_ignores_invalid_values():
 def test_parse_int_env_returns_default_on_invalid(monkeypatch):
     monkeypatch.setenv("OWNER_ID", "not-a-number")
     assert parse_int_env("OWNER_ID", default=99) == 99
+
+
+def test_update_property_appends_missing_key(tmp_path, monkeypatch):
+    props = tmp_path / "server.properties"
+    props.write_text("motd=hello\n")
+
+    monkeypatch.setattr("scripts.minecraft_bot.PROPERTIES_FILE", str(props))
+
+    update_property("view-distance", "10")
+
+    assert props.read_text() == "motd=hello\nview-distance=10\n"
+
+
+def test_read_property_preserves_text_after_equals(tmp_path, monkeypatch):
+    props = tmp_path / "server.properties"
+    props.write_text("motd=hello=world\n")
+
+    monkeypatch.setattr("scripts.minecraft_bot.PROPERTIES_FILE", str(props))
+
+    assert read_property("motd") == "hello=world"
+
+
+def test_handle_text_broadcast_confirmation_escapes_markdown(monkeypatch):
+    from scripts import minecraft_bot as bot
+
+    sent = []
+
+    def fake_send_message(chat_id, text, reply_markup=None):
+        sent.append((chat_id, text, reply_markup))
+
+    monkeypatch.setattr(bot, "ALLOWED_CHAT_IDS", [123])
+    monkeypatch.setattr(bot, "send_message", fake_send_message)
+    monkeypatch.setattr(bot, "rcon_command", lambda *_args, **_kwargs: "ok")
+
+    bot.pending_broadcast.clear()
+    bot.pending_broadcast[123] = True
+
+    bot.handle_text({"chat": {"id": 123}, "text": "A_*[]()`", "from": {"first_name": "Admin"}})
+
+    assert sent
+    assert sent[0][0] == 123
+    assert sent[0][1] == f"✅ *Broadcast Sent:*\n{bot.escape_markdown('A_*[]()`')}"
+    assert bot.pending_broadcast[123] is False
