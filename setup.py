@@ -35,9 +35,11 @@ def main():
     # Try to guess default paths based on typical setups or user's current valid ones roughly
     default_props = "/home/user/minecraft/data/server.properties"
     default_backup = "/home/user/minecraft/scripts/auto_backup.sh"
-    
+    default_compose_file = "docker-compose.yml"
+
     props_file = get_input("Path to server.properties", default=default_props)
     backup_script = get_input("Path to backup script", default=default_backup)
+    compose_file = get_input("Compose file path used for log streaming", default=default_compose_file)
 
     # Generate content
     env_content = f"""# Telegram Bot Token
@@ -55,6 +57,7 @@ CONTAINER_NAME={container_name}
 # Paths
 PROPERTIES_FILE={props_file}
 BACKUP_SCRIPT={backup_script}
+COMPOSE_FILE={compose_file}
 """
 
     # Write file

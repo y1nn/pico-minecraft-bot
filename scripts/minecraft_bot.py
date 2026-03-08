@@ -17,6 +17,7 @@ OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 CONTAINER_NAME = os.getenv("CONTAINER_NAME", "minecraft")
 PROPERTIES_FILE = os.getenv("PROPERTIES_FILE", "/data/server.properties")
 BACKUP_SCRIPT = os.getenv("BACKUP_SCRIPT", "./scripts/auto_backup.sh")
+COMPOSE_FILE = os.getenv("COMPOSE_FILE", "docker-compose.yml")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/"
 
@@ -444,7 +445,7 @@ def monitor_logs():
                 continue
 
             process = subprocess.Popen(
-                ["docker", "compose", "-f", "/home/fawi/minecraft/docker-compose.yml", "logs", "-f", "--tail=0", CONTAINER_NAME],
+                ["docker", "compose", "-f", COMPOSE_FILE, "logs", "-f", "--tail=0", CONTAINER_NAME],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
