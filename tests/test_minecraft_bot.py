@@ -5,7 +5,13 @@ from unittest.mock import MagicMock
 sys.modules["requests"] = MagicMock()
 sys.modules["dotenv"] = MagicMock()
 
-from scripts.minecraft_bot import strip_ansi, parse_chat_line
+from scripts.minecraft_bot import (
+    strip_ansi,
+    parse_chat_line,
+    parse_join_line,
+    parse_death_line,
+    parse_blocked_whitelist_line,
+)
 
 def test_strip_ansi_empty():
     assert strip_ansi("") == ""
@@ -38,3 +44,31 @@ def test_parse_chat_line_valid():
 def test_parse_chat_line_invalid():
     line = "[12:00:00] [Server thread/INFO]: Steve joined the game"
     assert parse_chat_line(line) is None
+
+def test_parse_join_line_valid():
+    line = "[12:00:01] [Server thread/INFO]: Alex joined the game"
+    assert parse_join_line(line) == "Alex"
+
+def test_parse_join_line_invalid():
+    line = "[12:00:01] [Server thread/INFO]: Alex left the game"
+    assert parse_join_line(line) is None
+
+def test_parse_death_line_valid():
+    line = "[12:00:02] [Server thread/INFO]: Steve was slain by Zombie"
+    assert parse_death_line(line) == "Steve was slain by Zombie"
+
+def test_parse_death_line_invalid_chat_message():
+    line = "[12:00:02] [Server thread/INFO]: <Steve> I almost died"
+    assert parse_death_line(line) is None
+
+def test_parse_death_line_invalid_non_death():
+    line = "[12:00:03] [Server thread/INFO]: Steve joined the game"
+    assert parse_death_line(line) is None
+
+def test_parse_blocked_whitelist_line_valid():
+    line = "[12:00:04] [Server thread/INFO]: Disconnecting Herobrine (You are not white-listed on this server!)"
+    assert parse_blocked_whitelist_line(line) == "Herobrine"
+
+def test_parse_blocked_whitelist_line_invalid():
+    line = "[12:00:04] [Server thread/INFO]: Disconnecting Herobrine (Timed out)"
+    assert parse_blocked_whitelist_line(line) is None
